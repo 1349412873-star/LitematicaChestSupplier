@@ -13,6 +13,7 @@ public class LitematicaChestSupplier implements ClientModInitializer {
     public static final String MOD_ID = "litematicachestsupplier";
     private static KeyBinding toggleKey;
     private static KeyBinding highlightKey;
+    private static boolean sentWelcomeMessage = false;
 
     @Override
     public void onInitializeClient() {
@@ -20,7 +21,16 @@ public class LitematicaChestSupplier implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) {
+                sentWelcomeMessage = false;
                 return;
+            }
+
+            if (!sentWelcomeMessage) {
+                AutoSupplyController.sendChat(
+                        "欢迎使用 Litematica Chest Supplier，模组作者 xiaolao。",
+                        "Welcome to Litematica Chest Supplier. Mod author: xiaolao."
+                );
+                sentWelcomeMessage = true;
             }
 
             while (toggleKey.wasPressed()) {
