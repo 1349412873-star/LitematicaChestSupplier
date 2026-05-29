@@ -79,7 +79,9 @@ public class AutoSupplyController {
 
         Map<Item, Integer> missingMaterials = LitematicaHelper.getMissingMaterials();
         Map<BlockPos, List<ItemStack>> matchingChests = ChestTrackerHelper.getChestsWithNeededItems(missingMaterials);
-        ChestHighlighter.updateChests(matchingChests);
+        Map<Item, Integer> inventoryCounts = getInventoryCounts(client);
+        Map<BlockPos, List<ItemStack>> usefulChests = filterUsefulChests(matchingChests, missingMaterials, inventoryCounts);
+        ChestHighlighter.updateChests(usefulChests);
 
         for (Item item : missingMaterials.keySet()) {
             if (!alertedMissingItems.contains(item) && !hasChestsWithItem(matchingChests, item)) {
@@ -93,7 +95,6 @@ public class AutoSupplyController {
 
         checkShortageSummary(missingMaterials);
 
-        Map<Item, Integer> inventoryCounts = getInventoryCounts(client);
         boolean inventoryHasEnoughMaterials = hasEnoughMaterials(missingMaterials, inventoryCounts);
 
         if (LcsConfig.getInstance().autoOpen
@@ -105,7 +106,7 @@ public class AutoSupplyController {
             if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
                 BlockHitResult blockHit = (BlockHitResult) hit;
                 BlockPos pos = blockHit.getBlockPos();
-                if (hasUsefulChestItems(matchingChests.get(pos), missingMaterials, inventoryCounts)) {
+                if (usefulChests.containsKey(pos)) {
                     double dist = client.player.getPos().squaredDistanceTo(Vec3d.ofCenter(pos));
                     double maxDist = LcsConfig.getInstance().maxDistance;
                     if (dist < maxDist * maxDist) {
@@ -135,7 +136,7 @@ public class AutoSupplyController {
 
             if (!missingMaterials.isEmpty() && handledScreenTicks >= 3 && supplyCooldown == 0) {
                 supplyCooldown = LcsConfig.getInstance().supplyCooldown;
-                autoTakeItems(handledScreen, missingMaterials, matchingChests);
+                autoTakeItems(handledScreen, missingMaterials, usefulChests);
             }
         } else if (wasScreenOpen) {
             currentChestPos = null;
@@ -156,6 +157,33 @@ public class AutoSupplyController {
             }
         }
         return false;
+    }
+
+    private static Map<BlockPos, List<ItemStack>> filterUsefulChests(
+            Map<BlockPos, List<ItemStack>> chests,
+            Map<Item, Integer> missingMaterials,
+            Map<Item, Integer> inventoryCounts) {
+
+        Map<BlockPos, List<ItemStack>> usefulChests = new HashMap<>();
+        for (Map.Entry<BlockPos, List<ItemStack>> entry : chests.entrySet()) {
+            List<ItemStack> usefulStacks = new ArrayList<>();
+            for (ItemStack stack : entry.getValue()) {
+                if (stack == null || stack.isEmpty()) {
+                    continue;
+                }
+
+                Item item = stack.getItem();
+                int stillNeeded = missingMaterials.getOrDefault(item, 0) - inventoryCounts.getOrDefault(item, 0);
+                if (stillNeeded > 0) {
+                    usefulStacks.add(stack);
+                }
+            }
+
+            if (!usefulStacks.isEmpty()) {
+                usefulChests.put(entry.getKey(), usefulStacks);
+            }
+        }
+        return usefulChests;
     }
 
     private static boolean hasUsefulChestItems(
