@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 public class MissingBlockHighlightController {
@@ -175,7 +176,9 @@ public class MissingBlockHighlightController {
         double renderDistSq = renderDistance * renderDistance;
         int maxRenderCount = config.highlightMaxCount;
 
-        List<BlockPosWithDistance> list = new ArrayList<>();
+        PriorityQueue<BlockPosWithDistance> nearest = new PriorityQueue<>(
+                (a, b) -> Double.compare(b.distSq, a.distSq)
+        );
         for (Map.Entry<Item, List<BlockPos>> entry : all.entrySet()) {
             Item item = entry.getKey();
             for (BlockPos pos : entry.getValue()) {
@@ -184,21 +187,20 @@ public class MissingBlockHighlightController {
                 double dz = pos.getZ() + 0.5 - playerPos.z;
                 double distSq = dx * dx + dy * dy + dz * dz;
                 if (distSq <= renderDistSq) {
-                    list.add(new BlockPosWithDistance(item, pos, distSq));
+                    BlockPosWithDistance candidate = new BlockPosWithDistance(item, pos, distSq);
+                    if (nearest.size() < maxRenderCount) {
+                        nearest.offer(candidate);
+                    } else if (nearest.peek() != null && distSq < nearest.peek().distSq) {
+                        nearest.poll();
+                        nearest.offer(candidate);
+                    }
                 }
             }
         }
 
-        list.sort((a, b) -> Double.compare(a.distSq, b.distSq));
-
         Map<Item, List<BlockPos>> nearby = new HashMap<>();
-        int count = 0;
-        for (BlockPosWithDistance entry : list) {
-            if (count >= maxRenderCount) {
-                break;
-            }
+        for (BlockPosWithDistance entry : nearest) {
             nearby.computeIfAbsent(entry.item, k -> new ArrayList<>()).add(entry.pos);
-            count++;
         }
 
         return nearby;

@@ -47,7 +47,7 @@ public class LitematicaHelper {
      * force 为 true 时强制重新扫描，否则在 tick 周期内限流（缓存 10 Ticks / 0.5 秒）。
      */
     public static Map<Item, Integer> getMissingMaterials(boolean force) {
-        if (!force && cacheCooldown > 0 && !cachedMissing.isEmpty()) {
+        if (!force && cacheCooldown > 0) {
             cacheCooldown--;
             return cachedMissing;
         }
@@ -180,7 +180,7 @@ public class LitematicaHelper {
      * force=true 时强制重新扫描，否则使用 10 Tick 缓存。
      */
     public static Map<Item, List<BlockPos>> getMissingBlockPositionsByItem(boolean force) {
-        if (!force && posCacheCooldown > 0 && !cachedMissingPosByItem.isEmpty()) {
+        if (!force && posCacheCooldown > 0) {
             posCacheCooldown--;
             return cachedMissingPosByItem;
         }

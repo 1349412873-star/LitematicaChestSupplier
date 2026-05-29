@@ -93,16 +93,23 @@ public class AutoSupplyController {
 
         checkShortageSummary(missingMaterials);
 
-        if (LcsConfig.getInstance().autoOpen && client.currentScreen == null && openCooldown == 0) {
+        Map<Item, Integer> inventoryCounts = getInventoryCounts(client);
+        boolean inventoryHasEnoughMaterials = hasEnoughMaterials(missingMaterials, inventoryCounts);
+
+        if (LcsConfig.getInstance().autoOpen
+                && client.currentScreen == null
+                && openCooldown == 0
+                && !missingMaterials.isEmpty()
+                && !inventoryHasEnoughMaterials) {
             HitResult hit = client.crosshairTarget;
             if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
                 BlockHitResult blockHit = (BlockHitResult) hit;
                 BlockPos pos = blockHit.getBlockPos();
-                if (matchingChests.containsKey(pos)) {
+                if (hasUsefulChestItems(matchingChests.get(pos), missingMaterials, inventoryCounts)) {
                     double dist = client.player.getPos().squaredDistanceTo(Vec3d.ofCenter(pos));
                     double maxDist = LcsConfig.getInstance().maxDistance;
                     if (dist < maxDist * maxDist) {
-                        openCooldown = 40;
+                        openCooldown = 10;
                         currentChestPos = pos;
                         hasTakenThisSession = false;
 
@@ -148,6 +155,30 @@ public class AutoSupplyController {
                 if (stack.getItem() == item) return true;
             }
         }
+        return false;
+    }
+
+    private static boolean hasUsefulChestItems(
+            List<ItemStack> chestItems,
+            Map<Item, Integer> missingMaterials,
+            Map<Item, Integer> inventoryCounts) {
+
+        if (chestItems == null || chestItems.isEmpty()) {
+            return false;
+        }
+
+        for (ItemStack stack : chestItems) {
+            if (stack == null || stack.isEmpty()) {
+                continue;
+            }
+
+            Item item = stack.getItem();
+            int stillNeeded = missingMaterials.getOrDefault(item, 0) - inventoryCounts.getOrDefault(item, 0);
+            if (stillNeeded > 0) {
+                return true;
+            }
+        }
+
         return false;
     }
 

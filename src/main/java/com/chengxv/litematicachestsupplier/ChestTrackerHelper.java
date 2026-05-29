@@ -1,53 +1,62 @@
 package com.chengxv.litematicachestsupplier;
 
-import red.jackf.chesttracker.api.memory.Memory;
-import red.jackf.chesttracker.api.memory.MemoryBank;
-import red.jackf.chesttracker.api.memory.MemoryBankAccess;
-import red.jackf.chesttracker.api.memory.MemoryKey;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import red.jackf.chesttracker.api.memory.Memory;
+import red.jackf.chesttracker.api.memory.MemoryBank;
+import red.jackf.chesttracker.api.memory.MemoryBankAccess;
+import red.jackf.chesttracker.api.memory.MemoryKey;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public class ChestTrackerHelper {
+    private static Map<BlockPos, List<ItemStack>> cachedMatchingChests = new HashMap<>();
+    private static int cacheCooldown = 0;
+    private static int cachedMissingSignature = 0;
 
-    /**
-     * 根据缺失的材料列表，从 ChestTracker 中搜索包含这些材料的箱子和对应的物品堆。
-     */
     public static Map<BlockPos, List<ItemStack>> getChestsWithNeededItems(Map<Item, Integer> missingItems) {
         Map<BlockPos, List<ItemStack>> matchingChests = new HashMap<>();
         if (missingItems == null || missingItems.isEmpty()) {
+            updateCache(matchingChests, 0);
             return matchingChests;
         }
 
-        // 获取 ChestTracker 当前已加载的内存数据库
+        int missingSignature = missingItems.hashCode();
+        if (cacheCooldown > 0 && missingSignature == cachedMissingSignature) {
+            cacheCooldown--;
+            return cachedMatchingChests;
+        }
+
         Optional<MemoryBank> loadedBank = MemoryBankAccess.INSTANCE.getLoaded();
-        if (!loadedBank.isPresent()) {
+        if (loadedBank.isEmpty()) {
+            updateCache(matchingChests, missingSignature);
             return matchingChests;
         }
 
         MemoryBank bank = loadedBank.get();
         Map<Identifier, MemoryKey> allMemories = bank.getAllMemories();
         if (allMemories == null) {
+            updateCache(matchingChests, missingSignature);
             return matchingChests;
         }
 
-        for (Map.Entry<Identifier, MemoryKey> keyEntry : allMemories.entrySet()) {
-            MemoryKey memoryKey = keyEntry.getValue();
+        for (MemoryKey memoryKey : allMemories.values()) {
             if (memoryKey == null) {
                 continue;
             }
 
-            // 获取该类型下记录的所有箱子位置及物品详情
             Map<BlockPos, Memory> memories = memoryKey.getMemories();
             if (memories == null) {
                 continue;
             }
 
             for (Map.Entry<BlockPos, Memory> memoryEntry : memories.entrySet()) {
-                BlockPos pos = memoryEntry.getKey();
                 Memory memory = memoryEntry.getValue();
                 if (memory == null || memory.isEmpty()) {
                     continue;
@@ -57,24 +66,25 @@ public class ChestTrackerHelper {
                 List<ItemStack> items = memory.items();
                 if (items != null) {
                     for (ItemStack stack : items) {
-                        if (stack == null || stack.isEmpty()) {
-                            continue;
-                        }
-
-                        Item item = stack.getItem();
-                        // 如果箱子里的物品处于投影缺失列表中，则进行记录
-                        if (missingItems.containsKey(item)) {
+                        if (stack != null && !stack.isEmpty() && missingItems.containsKey(stack.getItem())) {
                             matchingItemsInChest.add(stack.copy());
                         }
                     }
                 }
 
                 if (!matchingItemsInChest.isEmpty()) {
-                    matchingChests.put(pos, matchingItemsInChest);
+                    matchingChests.put(memoryEntry.getKey(), matchingItemsInChest);
                 }
             }
         }
 
+        updateCache(matchingChests, missingSignature);
         return matchingChests;
+    }
+
+    private static void updateCache(Map<BlockPos, List<ItemStack>> matchingChests, int missingSignature) {
+        cachedMatchingChests = matchingChests;
+        cachedMissingSignature = missingSignature;
+        cacheCooldown = 10;
     }
 }
