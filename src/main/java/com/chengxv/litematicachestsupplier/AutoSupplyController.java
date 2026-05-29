@@ -25,6 +25,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class AutoSupplyController {
+    private static final int OPEN_ATTEMPT_COOLDOWN = 10;
+    private static final int AFTER_AUTO_CLOSE_COOLDOWN = 5;
+    private static final int INVENTORY_FULL_COOLDOWN = 60;
     private static BlockPos currentChestPos = null;
     private static int supplyCooldown = 0;
     private static int openCooldown = 0;
@@ -110,7 +113,7 @@ public class AutoSupplyController {
                     double dist = client.player.getPos().squaredDistanceTo(Vec3d.ofCenter(pos));
                     double maxDist = LcsConfig.getInstance().maxDistance;
                     if (dist < maxDist * maxDist) {
-                        openCooldown = 10;
+                        openCooldown = OPEN_ATTEMPT_COOLDOWN;
                         currentChestPos = pos;
                         hasTakenThisSession = false;
 
@@ -245,7 +248,7 @@ public class AutoSupplyController {
                         "Inventory now has enough materials for the currently loaded missing blocks."
                 );
                 closeAutoOpenedScreen(client);
-                openCooldown = 40;
+                openCooldown = AFTER_AUTO_CLOSE_COOLDOWN;
             }
             return;
         }
@@ -307,7 +310,7 @@ public class AutoSupplyController {
                         "\u00A7cInventory is full!\u00A7f Place the items in your inventory, then return to the chest to continue."
                 );
                 closeAutoOpenedScreen(client);
-                openCooldown = 60;
+                openCooldown = INVENTORY_FULL_COOLDOWN;
             }
         } else if (!tookSomething && (hasTakenThisSession || !hasUsefulContainerItems(screen, client, missingMaterials, inventoryCounts))) {
             if (isAutoOpenedScreen()) {
@@ -317,7 +320,7 @@ public class AutoSupplyController {
                         "No more useful schematic items are available in this chest."
                 );
                 closeAutoOpenedScreen(client);
-                openCooldown = 40;
+                openCooldown = AFTER_AUTO_CLOSE_COOLDOWN;
             }
         }
     }
