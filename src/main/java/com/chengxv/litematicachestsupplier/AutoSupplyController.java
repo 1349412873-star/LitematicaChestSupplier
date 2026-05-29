@@ -14,7 +14,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,6 +30,8 @@ public class AutoSupplyController {
     private static final Map<Item, Integer> lastReportedMissing = new HashMap<>();
     private static boolean hasTakenThisSession = false;
     private static boolean wasScreenOpen = false;
+    private static int handledScreenTicks = 0;
+    private static int lastHandledSyncId = -1;
     private static final Map<Item, Integer> virtualInventoryCounts = new HashMap<>();
 
     public static void setEnabled(boolean value) {
@@ -94,9 +95,16 @@ public class AutoSupplyController {
             }
         }
 
-        if (client.currentScreen instanceof HandledScreen<?> handledScreen && !missingMaterials.isEmpty()) {
+        if (client.currentScreen instanceof HandledScreen<?> handledScreen) {
             wasScreenOpen = true;
-            if (supplyCooldown == 0) {
+            if (lastHandledSyncId != handledScreen.getScreenHandler().syncId) {
+                lastHandledSyncId = handledScreen.getScreenHandler().syncId;
+                handledScreenTicks = 0;
+            } else {
+                handledScreenTicks++;
+            }
+
+            if (!missingMaterials.isEmpty() && handledScreenTicks >= 3 && supplyCooldown == 0) {
                 supplyCooldown = LcsConfig.getInstance().supplyCooldown;
                 autoTakeItems(handledScreen, missingMaterials, matchingChests);
             }
@@ -104,6 +112,8 @@ public class AutoSupplyController {
             currentChestPos = null;
             hasTakenThisSession = false;
             wasScreenOpen = false;
+            handledScreenTicks = 0;
+            lastHandledSyncId = -1;
             virtualInventoryCounts.clear();
         }
     }
@@ -192,30 +202,11 @@ public class AutoSupplyController {
                 inventoryCounts.put(item, alreadyHas + slotCount);
                 virtualInventoryCounts.put(item, alreadyHas + slotCount);
             } else {
-                boolean success = false;
-                List<TargetSlotAllocation> allocations = allocateSlotsForTaking(screen, client, item, netNeeded);
-                if (!allocations.isEmpty()) {
-                    client.interactionManager.clickSlot(syncId, slot.id, 0, SlotActionType.PICKUP, client.player);
-                    for (TargetSlotAllocation alloc : allocations) {
-                        for (int k = 0; k < alloc.count; k++) {
-                            client.interactionManager.clickSlot(syncId, alloc.slotId, 1, SlotActionType.PICKUP, client.player);
-                        }
-                    }
-                    client.interactionManager.clickSlot(syncId, slot.id, 0, SlotActionType.PICKUP, client.player);
-                    tookSomething = true;
-                    hasTakenThisSession = true;
-                    inventoryCounts.put(item, alreadyHas + netNeeded);
-                    virtualInventoryCounts.put(item, alreadyHas + netNeeded);
-                    success = true;
-                }
-
-                if (!success) {
-                    client.interactionManager.clickSlot(syncId, slot.id, 0, SlotActionType.QUICK_MOVE, client.player);
-                    tookSomething = true;
-                    hasTakenThisSession = true;
-                    inventoryCounts.put(item, alreadyHas + slotCount);
-                    virtualInventoryCounts.put(item, alreadyHas + slotCount);
-                }
+                client.interactionManager.clickSlot(syncId, slot.id, 0, SlotActionType.QUICK_MOVE, client.player);
+                tookSomething = true;
+                hasTakenThisSession = true;
+                inventoryCounts.put(item, alreadyHas + slotCount);
+                virtualInventoryCounts.put(item, alreadyHas + slotCount);
             }
 
             if (LcsConfig.getInstance().supplyCooldown > 0) {
@@ -304,66 +295,6 @@ public class AutoSupplyController {
             }
         }
         return false;
-    }
-
-    private static class TargetSlotAllocation {
-        final int slotId;
-        final int count;
-
-        TargetSlotAllocation(int slotId, int count) {
-            this.slotId = slotId;
-            this.count = count;
-        }
-    }
-
-    private static List<TargetSlotAllocation> allocateSlotsForTaking(
-            HandledScreen<?> screen,
-            MinecraftClient client,
-            Item item,
-            int totalNeeded) {
-
-        List<TargetSlotAllocation> allocations = new ArrayList<>();
-        List<Slot> slots = screen.getScreenHandler().slots;
-        int remaining = totalNeeded;
-
-        for (Slot slot : slots) {
-            if (slot.inventory == client.player.getInventory() && slot.hasStack()) {
-                ItemStack stack = slot.getStack();
-                if (stack.getItem() == item) {
-                    int availableSpace = stack.getMaxCount() - stack.getCount();
-                    if (availableSpace > 0) {
-                        int toTake = Math.min(remaining, availableSpace);
-                        allocations.add(new TargetSlotAllocation(slot.id, toTake));
-                        remaining -= toTake;
-                        if (remaining <= 0) {
-                            return allocations;
-                        }
-                    }
-                }
-            }
-        }
-
-        for (Slot slot : slots) {
-            if (slot.inventory == client.player.getInventory() && !slot.hasStack()) {
-                boolean alreadyAllocated = false;
-                for (TargetSlotAllocation alloc : allocations) {
-                    if (alloc.slotId == slot.id) {
-                        alreadyAllocated = true;
-                        break;
-                    }
-                }
-                if (!alreadyAllocated) {
-                    int toTake = Math.min(remaining, item.getDefaultStack().getMaxCount());
-                    allocations.add(new TargetSlotAllocation(slot.id, toTake));
-                    remaining -= toTake;
-                    if (remaining <= 0) {
-                        return allocations;
-                    }
-                }
-            }
-        }
-
-        return allocations;
     }
 
     private static void reportInsufficientItemsIfNeeded(
