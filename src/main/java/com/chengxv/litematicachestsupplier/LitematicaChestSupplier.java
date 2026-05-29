@@ -27,8 +27,10 @@ public class LitematicaChestSupplier implements ClientModInitializer {
 
             if (!sentWelcomeMessage) {
                 AutoSupplyController.sendChat(
-                        "欢迎使用 Litematica Chest Supplier，模组作者 xiaolao。",
-                        "Welcome to Litematica Chest Supplier. Mod author: xiaolao."
+                        "\u00A7a欢迎使用 \u00A7bLitematica Chest Supplier\u00A7a，模组作者 \u00A7exiaolao\u00A7a。\n"
+                                + "\u00A77GitHub 仓库：\u00A79https://github.com/1349412873-star/LitematicaChestSupplier",
+                        "\u00A7aWelcome to \u00A7bLitematica Chest Supplier\u00A7a. Mod author: \u00A7exiaolao\u00A7a.\n"
+                                + "\u00A77GitHub repository: \u00A79https://github.com/1349412873-star/LitematicaChestSupplier"
                 );
                 sentWelcomeMessage = true;
             }
