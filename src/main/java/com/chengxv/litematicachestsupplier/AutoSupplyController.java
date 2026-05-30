@@ -574,6 +574,13 @@ public class AutoSupplyController {
         }
     }
 
+    public static void sendChat(Text text) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal("\u00A77[\u00A7bLCS\u00A77] \u00A7f").append(text), false);
+        }
+    }
+
     public static void sendChat(String zhText, String enText) {
         sendChat(selectText(zhText, enText));
     }

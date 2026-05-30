@@ -7,10 +7,18 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.text.ClickEvent;
+import net.minecraft.text.HoverEvent;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
+
+import java.net.URI;
 
 public class LitematicaChestSupplier implements ClientModInitializer {
     public static final String MOD_ID = "litematicachestsupplier";
+    private static final String REPOSITORY_URL = "https://github.com/1349412873-star/LitematicaChestSupplier";
     private static KeyBinding toggleKey;
     private static KeyBinding highlightKey;
     private static boolean sentWelcomeMessage = false;
@@ -26,12 +34,7 @@ public class LitematicaChestSupplier implements ClientModInitializer {
             }
 
             if (!sentWelcomeMessage) {
-                AutoSupplyController.sendChat(
-                        "\u00A7a欢迎使用 \u00A7bLitematica Chest Supplier\u00A7a，模组作者 \u00A7exiaolao\u00A7a。\n"
-                                + "\u00A77GitHub 仓库：\u00A79https://github.com/1349412873-star/LitematicaChestSupplier",
-                        "\u00A7aWelcome to \u00A7bLitematica Chest Supplier\u00A7a. Mod author: \u00A7exiaolao\u00A7a.\n"
-                                + "\u00A77GitHub repository: \u00A79https://github.com/1349412873-star/LitematicaChestSupplier"
-                );
+                AutoSupplyController.sendChat(createWelcomeMessage());
                 sentWelcomeMessage = true;
             }
 
@@ -62,33 +65,56 @@ public class LitematicaChestSupplier implements ClientModInitializer {
                 "category.litematicachestsupplier"
         ));
 
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            dispatcher.register(ClientCommandManager.literal("lcs")
-                    .then(ClientCommandManager.literal("toggle")
-                            .executes(context -> {
-                                toggleAutoSupply();
-                                return 1;
-                            }))
-                    .then(ClientCommandManager.literal("status")
-                            .executes(context -> {
-                                sendStatus();
-                                return 1;
-                            }))
-                    .then(ClientCommandManager.literal("highlight")
-                            .executes(context -> {
-                                toggleMissingBlockHighlight(MinecraftClient.getInstance());
-                                return 1;
-                            }))
-                    .then(ClientCommandManager.literal("reload")
-                            .executes(context -> {
-                                LcsConfig.load();
-                                sendReloadStatus();
-                                return 1;
-                            }))
-            );
-        });
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(ClientCommandManager.literal("lcs")
+                .then(ClientCommandManager.literal("toggle")
+                        .executes(context -> {
+                            toggleAutoSupply();
+                            return 1;
+                        }))
+                .then(ClientCommandManager.literal("status")
+                        .executes(context -> {
+                            sendStatus();
+                            return 1;
+                        }))
+                .then(ClientCommandManager.literal("highlight")
+                        .executes(context -> {
+                            toggleMissingBlockHighlight(MinecraftClient.getInstance());
+                            return 1;
+                        }))
+                .then(ClientCommandManager.literal("reload")
+                        .executes(context -> {
+                            LcsConfig.load();
+                            sendReloadStatus();
+                            return 1;
+                        }))
+        ));
 
         System.out.println("[LitematicaChestSupplier] Client side initialization finished successfully!");
+    }
+
+    private static Text createWelcomeMessage() {
+        boolean english = AutoSupplyController.isEnglishLanguage();
+        MutableText message = english
+                ? Text.literal("Welcome to ").formatted(Formatting.GREEN)
+                : Text.literal("欢迎使用 ").formatted(Formatting.GREEN);
+
+        message.append(Text.literal("Litematica Chest Supplier").formatted(Formatting.AQUA));
+        message.append(english
+                ? Text.literal(". Mod author: ").formatted(Formatting.GREEN)
+                : Text.literal("，模组作者 ").formatted(Formatting.GREEN));
+        message.append(Text.literal("xiaolao").formatted(Formatting.YELLOW));
+        message.append(english ? Text.literal(".\n") : Text.literal("。\n"));
+        message.append(Text.literal(english ? "GitHub repository: " : "GitHub 仓库：").formatted(Formatting.GRAY));
+        message.append(createRepositoryLink());
+        return message;
+    }
+
+    private static Text createRepositoryLink() {
+        return Text.literal(REPOSITORY_URL)
+                .formatted(Formatting.BLUE, Formatting.UNDERLINE)
+                .styled(style -> style
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create(REPOSITORY_URL)))
+                        .withHoverEvent(new HoverEvent.ShowText(Text.literal("Open " + REPOSITORY_URL))));
     }
 
     private static void toggleAutoSupply() {
