@@ -28,7 +28,15 @@ public class AutoSupplyController {
     private static final int OPEN_ATTEMPT_COOLDOWN = 10;
     private static final int AFTER_AUTO_CLOSE_COOLDOWN = 5;
     private static final int INVENTORY_FULL_COOLDOWN = 60;
+    private static final int REOPEN_LOOP_WINDOW = 100;
+    private static final int REOPEN_LOOP_THRESHOLD = 3;
+    private static final int REOPEN_LOOP_SUPPRESS_COOLDOWN = 100;
     private static BlockPos currentChestPos = null;
+    private static BlockPos lastAutoOpenedChestPos = null;
+    private static int repeatedAutoOpenCount = 0;
+    private static int repeatedAutoOpenWindow = 0;
+    private static BlockPos suppressedChestPos = null;
+    private static int suppressedChestCooldown = 0;
     private static int supplyCooldown = 0;
     private static int openCooldown = 0;
     private static final Set<Item> alertedMissingItems = new HashSet<>();
@@ -62,6 +70,19 @@ public class AutoSupplyController {
 
         if (supplyCooldown > 0) supplyCooldown--;
         if (openCooldown > 0) openCooldown--;
+        if (repeatedAutoOpenWindow > 0) {
+            repeatedAutoOpenWindow--;
+            if (repeatedAutoOpenWindow == 0) {
+                lastAutoOpenedChestPos = null;
+                repeatedAutoOpenCount = 0;
+            }
+        }
+        if (suppressedChestCooldown > 0) {
+            suppressedChestCooldown--;
+            if (suppressedChestCooldown == 0) {
+                suppressedChestPos = null;
+            }
+        }
 
         if (client.currentScreen instanceof HandledScreen<?> handledScreen && !pendingClicks.isEmpty()) {
             if (handledScreen.getScreenHandler().syncId == pendingClickSyncId) {
@@ -109,10 +130,10 @@ public class AutoSupplyController {
             if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
                 BlockHitResult blockHit = (BlockHitResult) hit;
                 BlockPos pos = blockHit.getBlockPos();
-                if (usefulChests.containsKey(pos)) {
+                if (usefulChests.containsKey(pos) && !isSuppressedChest(pos)) {
                     double dist = client.player.getPos().squaredDistanceTo(Vec3d.ofCenter(pos));
                     double maxDist = LcsConfig.getInstance().maxDistance;
-                    if (dist < maxDist * maxDist) {
+                    if (dist < maxDist * maxDist && recordAutoOpenAttempt(pos)) {
                         openCooldown = OPEN_ATTEMPT_COOLDOWN;
                         currentChestPos = pos;
                         hasTakenThisSession = false;
@@ -327,6 +348,34 @@ public class AutoSupplyController {
 
     private static boolean isAutoOpenedScreen() {
         return currentChestPos != null;
+    }
+
+    private static boolean isSuppressedChest(BlockPos pos) {
+        return suppressedChestCooldown > 0 && pos.equals(suppressedChestPos);
+    }
+
+    private static boolean recordAutoOpenAttempt(BlockPos pos) {
+        if (pos.equals(lastAutoOpenedChestPos) && repeatedAutoOpenWindow > 0) {
+            repeatedAutoOpenCount++;
+        } else {
+            lastAutoOpenedChestPos = pos;
+            repeatedAutoOpenCount = 1;
+        }
+        repeatedAutoOpenWindow = REOPEN_LOOP_WINDOW;
+
+        if (repeatedAutoOpenCount > REOPEN_LOOP_THRESHOLD) {
+            suppressedChestPos = pos;
+            suppressedChestCooldown = REOPEN_LOOP_SUPPRESS_COOLDOWN;
+            repeatedAutoOpenCount = 0;
+            repeatedAutoOpenWindow = 0;
+            sendChat(
+                    "\u00A7e检测到同一个箱子反复自动打开，已暂时跳过该箱子 5 秒。",
+                    "\u00A7eDetected repeated auto-opening of the same chest. Skipping this chest for 5 seconds."
+            );
+            return false;
+        }
+
+        return true;
     }
 
     private static void closeAutoOpenedScreen(MinecraftClient client) {
