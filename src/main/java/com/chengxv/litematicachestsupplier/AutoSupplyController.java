@@ -28,7 +28,10 @@ public class AutoSupplyController {
     private static final int OPEN_ATTEMPT_COOLDOWN = 10;
     private static final int AFTER_AUTO_CLOSE_COOLDOWN = 5;
     private static final int INVENTORY_FULL_COOLDOWN = 60;
+    private static final int RECENTLY_CLOSED_CHEST_COOLDOWN = 60;
     private static BlockPos currentChestPos = null;
+    private static BlockPos recentlyClosedChestPos = null;
+    private static int recentlyClosedChestCooldown = 0;
     private static int supplyCooldown = 0;
     private static int openCooldown = 0;
     private static final Set<Item> alertedMissingItems = new HashSet<>();
@@ -62,6 +65,12 @@ public class AutoSupplyController {
 
         if (supplyCooldown > 0) supplyCooldown--;
         if (openCooldown > 0) openCooldown--;
+        if (recentlyClosedChestCooldown > 0) {
+            recentlyClosedChestCooldown--;
+            if (recentlyClosedChestCooldown == 0) {
+                recentlyClosedChestPos = null;
+            }
+        }
 
         if (client.currentScreen instanceof HandledScreen<?> handledScreen && !pendingClicks.isEmpty()) {
             if (handledScreen.getScreenHandler().syncId == pendingClickSyncId) {
@@ -109,7 +118,7 @@ public class AutoSupplyController {
             if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
                 BlockHitResult blockHit = (BlockHitResult) hit;
                 BlockPos pos = blockHit.getBlockPos();
-                if (usefulChests.containsKey(pos)) {
+                if (usefulChests.containsKey(pos) && !isRecentlyClosedChest(pos)) {
                     double dist = client.player.getPos().squaredDistanceTo(Vec3d.ofCenter(pos));
                     double maxDist = LcsConfig.getInstance().maxDistance;
                     if (dist < maxDist * maxDist) {
@@ -247,7 +256,7 @@ public class AutoSupplyController {
                         "背包内材料已经足够补齐当前已加载的缺失方块。",
                         "Inventory now has enough materials for the currently loaded missing blocks."
                 );
-                closeAutoOpenedScreen(client);
+                closeAutoOpenedScreen(client, true);
                 openCooldown = AFTER_AUTO_CLOSE_COOLDOWN;
             }
             return;
@@ -309,7 +318,7 @@ public class AutoSupplyController {
                         "\u00A7c背包已满！\u00A7f请先铺设背包里的材料，再回来继续拿取。",
                         "\u00A7cInventory is full!\u00A7f Place the items in your inventory, then return to the chest to continue."
                 );
-                closeAutoOpenedScreen(client);
+                closeAutoOpenedScreen(client, true);
                 openCooldown = INVENTORY_FULL_COOLDOWN;
             }
         } else if (!tookSomething && (hasTakenThisSession || !hasUsefulContainerItems(screen, client, missingMaterials, inventoryCounts))) {
@@ -319,7 +328,7 @@ public class AutoSupplyController {
                         "当前箱子里没有更多仍然需要的投影材料。",
                         "No more useful schematic items are available in this chest."
                 );
-                closeAutoOpenedScreen(client);
+                closeAutoOpenedScreen(client, true);
                 openCooldown = AFTER_AUTO_CLOSE_COOLDOWN;
             }
         }
@@ -329,8 +338,16 @@ public class AutoSupplyController {
         return currentChestPos != null;
     }
 
-    private static void closeAutoOpenedScreen(MinecraftClient client) {
+    private static boolean isRecentlyClosedChest(BlockPos pos) {
+        return recentlyClosedChestCooldown > 0 && pos.equals(recentlyClosedChestPos);
+    }
+
+    private static void closeAutoOpenedScreen(MinecraftClient client, boolean suppressReopen) {
         if (isAutoOpenedScreen() && client.player != null) {
+            if (suppressReopen) {
+                recentlyClosedChestPos = currentChestPos;
+                recentlyClosedChestCooldown = RECENTLY_CLOSED_CHEST_COOLDOWN;
+            }
             client.player.closeHandledScreen();
         }
     }
